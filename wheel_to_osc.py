@@ -17,6 +17,13 @@ import sdl2.ext
 from PIL import Image, ImageTk
 import pystray
 
+# Attempt to import keyboard for global key polling
+try:
+    import keyboard
+    KEYBOARD_AVAILABLE = True
+except ImportError:
+    KEYBOARD_AVAILABLE = False
+
 
 def resource_path(relative_path):
     try:
@@ -25,12 +32,37 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        self.widget.bind("<Enter>", self.show_tooltip)
+        self.widget.bind("<Leave>", self.hide_tooltip)
+
+    def show_tooltip(self, event=None):
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + 20
+        self.tooltip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True) # Removes window borders
+        tw.wm_geometry(f"+{x}+{y}")
+        
+        label = tk.Label(tw, text=self.text, justify="left",
+                         background="#333333", foreground="white", relief="solid", borderwidth=1,
+                         font=("Segoe UI", 9, "normal"), padx=5, pady=5)
+        label.pack()
+
+    def hide_tooltip(self, event=None):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
 
 class OscWheelApp:
     def __init__(self, root):
         self.root = root
         self.root.title("CTRL 2 OSC")
-        self.root.geometry("650x780")
+        # Widened window to accommodate custom address fields comfortably
+        self.root.geometry("850x780")
         
         # State variables
         self.is_running = False
@@ -49,15 +81,19 @@ class OscWheelApp:
         self.prev_axes = {}
         self.prev_buttons = {}
         self.prev_hats = {} 
+        self.prev_keys = {}
         self.update_job = None
         self.devices_map = {} 
         
         # Configuration Variables
         self.axis_config = {}
         self.button_vars = {}
-        self.button_name_vars = {}        # NEW: Track renamable text variables for buttons
+        self.button_name_vars = {}        
+        self.button_addr_vars = {}        # Custom addresses for buttons
         self.current_button_map = {i: f"Btn {i}" for i in range(24)} 
         self.hat_vars = {}
+        self.hat_addr_vars = {}           # Custom addresses for hats
+        self.keyboard_vars = {}           # Keyboard mapping variables
         self.setting_widgets = [] 
         self.config_file = "config.json"
         
@@ -82,8 +118,8 @@ class OscWheelApp:
         # Preview Canvas Variables (For Standard Gamepads)
         self.preview_canvases = []
         self.preview_dots = []
-        self.std_grid_axes = []      # Maps which axes go to which grids
-        self.std_trigger_axes = []   # Maps which axes go to triggers
+        self.std_grid_axes = []      
+        self.std_trigger_axes = []   
         self.canvas_size = 140
         self.center = self.canvas_size // 2
         self.radius = 60
@@ -115,22 +151,18 @@ class OscWheelApp:
                     self.img_off = Image.open(path_off)
                     self.img_on = Image.open(path_on)
                     
-                    # Resized versions for the UI dashboard (24x24)
                     self.ui_icon_off = ImageTk.PhotoImage(self.img_off.resize((36, 36), Image.Resampling.LANCZOS))
                     self.ui_icon_on = ImageTk.PhotoImage(self.img_on.resize((36, 36), Image.Resampling.LANCZOS))
                     
-                    # Standard versions for tray and window icon
                     self.icon_off_tk = ImageTk.PhotoImage(self.img_off)
                     self.icon_on_tk = ImageTk.PhotoImage(self.img_on)
                     self.root.iconphoto(True, self.icon_off_tk)
                 else:
-                    # Fallback if files are missing
                     self.img_off = Image.new('RGB', (24, 24), color='red')
                     self.img_on = Image.new('RGB', (24, 24), color='green')
                     self.ui_icon_off = ImageTk.PhotoImage(self.img_off)
                     self.ui_icon_on = ImageTk.PhotoImage(self.img_on)
             except Exception:
-                # Final safety fallback
                 self.ui_icon_off = None
                 self.ui_icon_on = None
 
@@ -186,14 +218,13 @@ class OscWheelApp:
         self.port_entry.grid(row=1, column=1, pady=2, padx=5, sticky="w")
         self.setting_widgets.append(self.port_entry)
 
-        # OSC Input Port
         tk.Label(settings_frame, text="Listen Port (FFB In):").grid(row=2, column=0, sticky="e", pady=2)
         self.listen_port_entry = tk.Entry(settings_frame, width=10)
         self.listen_port_entry.insert(0, "4042")
         self.listen_port_entry.grid(row=2, column=1, pady=2, padx=5, sticky="w")
         self.setting_widgets.append(self.listen_port_entry)
 
-        tk.Label(settings_frame, text="OSC Address:").grid(row=3, column=0, sticky="e", pady=2)
+        tk.Label(settings_frame, text="Base OSC Address:").grid(row=3, column=0, sticky="e", pady=2)
         self.addr_entry = tk.Entry(settings_frame, width=25)
         self.addr_entry.insert(0, "/wheel/input")
         self.addr_entry.grid(row=3, column=1, pady=2, padx=5, sticky="w")
@@ -301,18 +332,18 @@ class OscWheelApp:
         self.preview_frame.pack(fill="x", padx=10, pady=5)
         tk.Label(self.preview_frame, text="Waiting for device...", fg="gray").pack(pady=5)
 
-        self.axes_frame = tk.LabelFrame(self.scrollable_frame, text="Axis Configuration (Hardware ID -> OSC ID)", padx=10, pady=10)
+        self.axes_frame = tk.LabelFrame(self.scrollable_frame, text="Axis Configuration", padx=10, pady=10)
         self.axes_frame.pack(fill="x", padx=10, pady=5)
         tk.Label(self.axes_frame, text="Please connect and select a controller.", fg="gray").pack(pady=5)
 
-        buttons_frame = tk.LabelFrame(self.scrollable_frame, text="Button Mapping (Hardware ID -> OSC ID)", padx=10, pady=10)
+        buttons_frame = tk.LabelFrame(self.scrollable_frame, text="Button Mapping", padx=10, pady=10)
         buttons_frame.pack(fill="both", expand=True, padx=10, pady=(0, 5))
 
         grid_frame = tk.Frame(buttons_frame)
         grid_frame.pack(expand=True)
 
         for i in range(24):
-            col = (i // 12) * 3
+            col = (i // 12) * 5
             row = i % 12
             
             # Text entry for the custom name
@@ -322,29 +353,89 @@ class OscWheelApp:
             name_ent.grid(row=row, column=col, sticky="e", pady=2)
             self.setting_widgets.append(name_ent)
             
-            tk.Label(grid_frame, text="->").grid(row=row, column=col+1, padx=2)
+            tk.Label(grid_frame, text="-> ID:").grid(row=row, column=col+1, padx=2)
             
             var = tk.StringVar(value=str(i))
             ent = tk.Entry(grid_frame, textvariable=var, width=5)
-            ent.grid(row=row, column=col+2, padx=(0, 20), pady=2)
+            ent.grid(row=row, column=col+2, padx=(0, 5), pady=2)
             self.button_vars[i] = var
             self.setting_widgets.append(ent)
+            
+            tk.Label(grid_frame, text="Addr:").grid(row=row, column=col+3, padx=2)
+            
+            addr_var = tk.StringVar(value="")
+            addr_ent = tk.Entry(grid_frame, textvariable=addr_var, width=12)
+            addr_ent.grid(row=row, column=col+4, padx=(0, 20), pady=2)
+            self.button_addr_vars[i] = addr_var
+            self.setting_widgets.append(addr_ent)
 
-        # --- NEW HAT MAPPING FRAME ---
-        hats_frame = tk.LabelFrame(self.scrollable_frame, text="D-Pad / Hat Mapping (Hardware ID -> OSC ID)", padx=10, pady=10)
+        # --- HAT MAPPING FRAME ---
+        hats_frame = tk.LabelFrame(self.scrollable_frame, text="D-Pad / Hat Mapping", padx=10, pady=10)
         hats_frame.pack(fill="x", padx=10, pady=(0, 5))
         
         hat_grid = tk.Frame(hats_frame)
         hat_grid.pack(expand=True)
         
         for i in range(4): # Supports up to 4 D-Pads/Hats
-            tk.Label(hat_grid, text=f"Hat {i} ->").grid(row=0, column=i*2, sticky="e", pady=2)
+            tk.Label(hat_grid, text=f"Hat {i} -> ID:").grid(row=i, column=0, sticky="e", pady=2)
             var = tk.StringVar(value=str(i))
             ent = tk.Entry(hat_grid, textvariable=var, width=5)
-            ent.grid(row=0, column=i*2+1, padx=(0, 20), pady=2)
+            ent.grid(row=i, column=1, padx=(0, 5), pady=2)
             self.hat_vars[i] = var
             self.setting_widgets.append(ent)
+            
+            tk.Label(hat_grid, text="Addr:").grid(row=i, column=2, sticky="e", pady=2)
+            addr_var = tk.StringVar(value="")
+            addr_ent = tk.Entry(hat_grid, textvariable=addr_var, width=12)
+            addr_ent.grid(row=i, column=3, padx=(0, 20), pady=2)
+            self.hat_addr_vars[i] = addr_var
+            self.setting_widgets.append(addr_ent)
         # -----------------------------
+
+        
+        # --- KEYBOARD MAPPING FRAME ---
+        keyboard_frame = tk.LabelFrame(self.scrollable_frame, text="Global Keyboard Mapping (Key -> OSC Address / ID)", padx=10, pady=10)
+        keyboard_frame.pack(fill="x", padx=10, pady=(0, 5))
+        
+        # Adding the Tooltip Label
+        help_lbl = tk.Label(keyboard_frame, text="[?] Hover for help", fg="#4CAF50", cursor="question_arrow")
+        help_lbl.pack(anchor="e", pady=(0, 5))
+        
+        help_text = (
+            "How to bind keys:\n\n"
+            "• Key : The keyboard key you want to press (e.g., 'w', 'space', 'shift', 'ctrl+c').\n\n"
+             "• Key Combinations : You can even type key combinations into that field and they'll work too! (e.g., 'shift+1', 'ctrl+c', 'F3+4', 'alt+F4'...).\n\n"
+            "• Addr : The target OSC Address (e.g., '/avatar/parameters/Jump').\n\n"
+            "• ID : An optional numeric ID to pass as an argument."
+        )
+        ToolTip(help_lbl, help_text)
+
+        if KEYBOARD_AVAILABLE:
+            k_grid = tk.Frame(keyboard_frame)
+            k_grid.pack(expand=True)
+            for i in range(12): # 12 slots for mapped keys
+                row = i // 2
+                col = (i % 2) * 6
+                
+                tk.Label(k_grid, text=f"Slot {i+1} Key:").grid(row=row, column=col, sticky="e", pady=2)
+                k_var = tk.StringVar()
+                k_ent = tk.Entry(k_grid, textvariable=k_var, width=5)
+                k_ent.grid(row=row, column=col+1, padx=2, pady=2)
+                
+                tk.Label(k_grid, text="-> Addr:").grid(row=row, column=col+2, sticky="e", pady=2)
+                a_var = tk.StringVar()
+                a_ent = tk.Entry(k_grid, textvariable=a_var, width=12)
+                a_ent.grid(row=row, column=col+3, padx=2, pady=2)
+                
+                tk.Label(k_grid, text="ID:").grid(row=row, column=col+4, sticky="e", pady=2)
+                i_var = tk.StringVar()
+                i_ent = tk.Entry(k_grid, textvariable=i_var, width=5)
+                i_ent.grid(row=row, column=col+5, padx=(2, 20), pady=2)
+                
+                self.keyboard_vars[i] = {'key': k_var, 'addr': a_var, 'id': i_var}
+                self.setting_widgets.extend([k_ent, a_ent, i_ent])
+        else:
+            tk.Label(keyboard_frame, text="Keyboard module not installed. Run 'pip install keyboard' in your environment to enable.", fg="#e74c3c").pack(pady=5)
 
         reset_frame = tk.Frame(self.scrollable_frame)
         reset_frame.pack(fill="x", padx=10, pady=20)
@@ -535,6 +626,7 @@ class OscWheelApp:
                 self.axis_config[axis_idx] = {
                     'name_var': tk.StringVar(value=f"Axis {axis_idx}"),
                     'id_var': tk.StringVar(value=str(axis_idx)),
+                    'addr_var': tk.StringVar(value=""),
                     'inv_var': tk.BooleanVar(value=False),
                     'sens_var': tk.DoubleVar(value=1.0),
                     'dead_var': tk.DoubleVar(value=0.0)
@@ -550,21 +642,26 @@ class OscWheelApp:
             name_entry.pack(side="left")
             self.setting_widgets.append(name_entry)
             
-            tk.Label(row_frame, text="-> OSC ID:").pack(side="left")
+            tk.Label(row_frame, text="-> ID:").pack(side="left")
             id_entry = tk.Entry(row_frame, textvariable=config['id_var'], width=4)
-            id_entry.pack(side="left", padx=(2, 10))
+            id_entry.pack(side="left", padx=(2, 5))
             self.setting_widgets.append(id_entry)
+            
+            tk.Label(row_frame, text="Addr:").pack(side="left")
+            addr_entry = tk.Entry(row_frame, textvariable=config['addr_var'], width=12)
+            addr_entry.pack(side="left", padx=(2, 5))
+            self.setting_widgets.append(addr_entry)
             
             chk = tk.Checkbutton(row_frame, text="Invert", variable=config['inv_var'])
             chk.pack(side="left", padx=2)
             self.setting_widgets.append(chk)
             
-            tk.Label(row_frame, text="Deadzone:").pack(side="left", padx=(10, 0))
-            dead_scale = tk.Scale(row_frame, variable=config['dead_var'], from_=0.0, to=0.5, resolution=0.01, orient="horizontal", length=100)
+            tk.Label(row_frame, text="Deadzone:").pack(side="left", padx=(5, 0))
+            dead_scale = tk.Scale(row_frame, variable=config['dead_var'], from_=0.0, to=0.5, resolution=0.01, orient="horizontal", length=80)
             dead_scale.pack(side="left", padx=2)
             self.setting_widgets.append(dead_scale)
             
-            tk.Label(row_frame, text="Sens:").pack(side="left", padx=(10, 0))
+            tk.Label(row_frame, text="Sens:").pack(side="left", padx=(5, 0))
             sens_scale = tk.Scale(row_frame, variable=config['sens_var'], from_=0.1, to=5.0, resolution=0.1, orient="horizontal")
             sens_scale.pack(side="left", fill="x", expand=True, padx=2)
             self.setting_widgets.append(sens_scale)
@@ -658,8 +755,8 @@ class OscWheelApp:
 
         content = [
                     ("Controller 2 OSC \n", "h1"),
-                    ("Version 2.3.0\n", "code"),
-                    ("\n C2O is a lightweight, GUI-driven Python application designed to seamlessly bridge the gap between physical hardware and digital environments. It reads real-time data from connected USB steering wheels, Bluetooth gamepads, and joysticks. Capturing everything from continuous analog axes (like pedals and throttles) to discrete button presses and D-pad movements.\n\n", ""),
+                    ("Version 2.4.0\n", "code"),
+                    ("\n C2O is a lightweight, GUI-driven Python application designed to seamlessly bridge the gap between physical hardware and digital environments. It reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards. Capturing everything from continuous analog axes (like pedals and throttles) to discrete button presses and D-pad movements.\n\n", ""),
                     ("The application translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware.\n\n", ""),
                     ("C2O was developed as, and aims to be a versatile solution for mapping physical simulation hardware to Massive Loop.\n\n", ""),
                     ("Programmed by Brandon Withington\n", "code"),
@@ -674,8 +771,8 @@ class OscWheelApp:
                     ("The network port your receiving application is listening to.\n\n", "bullet"),
                     ("   • Listen Port (FFB In): ", "bold"),
                     ("The port C2O listens on for incoming OSC FFB commands.\n\n", "bullet"),
-                    ("   • OSC Address: ", "bold"),
-                    ("The specific OSC endpoint you want to broadcast to.\n\n", "bullet"),
+                    ("   • Base OSC Address: ", "bold"),
+                    ("The default OSC endpoint you want to broadcast to (unless overridden by a custom address in the input settings).\n\n", "bullet"),
                     ("3. Start Streaming: ", "bold"),
                     ("Click the Start Streaming button.\n\n", ""),
 
@@ -687,6 +784,8 @@ class OscWheelApp:
                     ("Allows you to set a center threshold that ignores slight resting inputs (like stick drift). The output will scale smoothly past the deadzone.\n\n", ""),
                     ("• Sensitivity: ", "bold"),
                     ("Acts as a multiplier. If set to 2.0, moving an axis halfway will output the maximum 1.0 value.\n\n", ""),
+                    ("• Custom Addresses (Addr): ", "bold"),
+                    ("You can override the base OSC address on a per-axis, per-button, or per-key basis. If left blank, it defaults to the Base OSC Address.\n\n", ""),
                     ("Utilize the input preview to determine, visualize, and feel how your inputs are being translated into software in real time!\n\n", ""),
 
                     ("OSC Payload Format (Output)\n", "h2"),
@@ -694,6 +793,8 @@ class OscWheelApp:
                     ("[Address] \"axis\" [Axis Index] [Float Value]\n", "code"),
                     ("• Buttons: ", "bold"),
                     ("[Address] \"button\" [Button Index] [Int Value]\n", "code"),
+                    ("• Keyboard: ", "bold"),
+                    ("[Address] \"keyboard\" [Mapped ID] [Int Value]\n", "code"),
                     ("\n", ""),
 
                     ("OSC Payload Format (Remote FFB Input)\n", "h2"),
@@ -704,6 +805,10 @@ class OscWheelApp:
                     ("• /ffb/friction [Float 0-100]: ", "bold"),
                     ("Adjust the static friction dynamically.\n", "code"),
                     ("\n\n", ""),
+
+                    ("Version 2.4.0 Update Log\n", "h2"),
+                    ("• Added customizable OSC address routing per axis, button, and hat.\n", "bullet"),
+                    ("• Added global Keyboard support (via 'keyboard' library) to map specific keypresses directly to OSC outputs.\n", "bullet"),
                     
                     ("Version 2.3.0 Update Log\n", "h2"),
                     ("• Allowed dynamic renaming of buttons and axes directly from the GUI, saved per profile.\n", "bullet"),
@@ -809,13 +914,17 @@ class OscWheelApp:
             "axes": {},
             "buttons": {},
             "button_names": {}, 
-            "hats": {}
+            "button_addrs": {},
+            "hats": {},
+            "hat_addrs": {},
+            "keyboard": {}
         }
         
         for idx, config in self.axis_config.items():
             config_data["axes"][str(idx)] = {
                 "custom_name": config.get('name_var', tk.StringVar(value=f"Axis {idx}")).get(),
                 "osc_id": config['id_var'].get(),
+                "custom_addr": config['addr_var'].get(),
                 "inverted": config['inv_var'].get(),
                 "sensitivity": config['sens_var'].get(),
                 "deadzone": config['dead_var'].get()
@@ -826,6 +935,22 @@ class OscWheelApp:
             
         for idx, var in self.button_name_vars.items():
             config_data["button_names"][str(idx)] = var.get()
+            
+        for idx, var in self.button_addr_vars.items():
+            config_data["button_addrs"][str(idx)] = var.get()
+
+        for idx, var in self.hat_vars.items():
+            config_data["hats"][str(idx)] = var.get()
+
+        for idx, var in self.hat_addr_vars.items():
+            config_data["hat_addrs"][str(idx)] = var.get()
+            
+        for idx, k_vars in self.keyboard_vars.items():
+            config_data["keyboard"][str(idx)] = {
+                'key': k_vars['key'].get(),
+                'addr': k_vars['addr'].get(),
+                'id': k_vars['id'].get()
+            }
 
         self.profiles[self.current_profile_name.get()] = config_data
 
@@ -856,12 +981,14 @@ class OscWheelApp:
                     self.axis_config[idx] = {
                         'name_var': tk.StringVar(value=f"Axis {idx}"),
                         'id_var': tk.StringVar(value=str(idx)),
+                        'addr_var': tk.StringVar(value=""),
                         'inv_var': tk.BooleanVar(value=False),
                         'sens_var': tk.DoubleVar(value=1.0),
                         'dead_var': tk.DoubleVar(value=0.0)
                     }
                 self.axis_config[idx]['name_var'].set(data.get("custom_name", f"Axis {idx}"))
                 self.axis_config[idx]['id_var'].set(data.get("osc_id", str(idx)))
+                self.axis_config[idx]['addr_var'].set(data.get("custom_addr", ""))
                 self.axis_config[idx]['inv_var'].set(data.get("inverted", False))
                 self.axis_config[idx]['sens_var'].set(data.get("sensitivity", 1.0))
                 self.axis_config[idx]['dead_var'].set(data.get("deadzone", 0.0))
@@ -877,12 +1004,32 @@ class OscWheelApp:
                 idx = int(idx_str)
                 if idx in self.button_name_vars:
                     self.button_name_vars[idx].set(value)
+                    
+        if "button_addrs" in config_data:
+            for idx_str, value in config_data["button_addrs"].items():
+                idx = int(idx_str)
+                if idx in self.button_addr_vars:
+                    self.button_addr_vars[idx].set(value)
 
         if "hats" in config_data:
             for idx_str, value in config_data["hats"].items():
                 idx = int(idx_str)
                 if idx in self.hat_vars:
                     self.hat_vars[idx].set(value)
+
+        if "hat_addrs" in config_data:
+            for idx_str, value in config_data["hat_addrs"].items():
+                idx = int(idx_str)
+                if idx in self.hat_addr_vars:
+                    self.hat_addr_vars[idx].set(value)
+                    
+        if "keyboard" in config_data:
+            for idx_str, value in config_data["keyboard"].items():
+                idx = int(idx_str)
+                if idx in self.keyboard_vars:
+                    self.keyboard_vars[idx]['key'].set(value.get('key', ''))
+                    self.keyboard_vars[idx]['addr'].set(value.get('addr', ''))
+                    self.keyboard_vars[idx]['id'].set(value.get('id', ''))
 
     def _update_button_labels(self, name):
         name_lower = name.lower()
@@ -940,7 +1087,7 @@ class OscWheelApp:
             self.device_dropdown.current(0)
             self._populate_axes_frame(0)
             self._populate_preview_frame(0)
-            self._update_button_labels("none") # Reset visual maps
+            self._update_button_labels("none") 
             self.ffb_frame.pack_forget() 
         else:
             dropdown_values = []
@@ -1083,7 +1230,6 @@ class OscWheelApp:
                 self.profiles = data["profiles"]
                 active = data.get("active_profile", "Default")
             else:
-                # Legacy format migration
                 self.profiles = {"Default": data}
                 active = "Default"
                 
@@ -1106,17 +1252,26 @@ class OscWheelApp:
             for axis_idx, config in self.axis_config.items():
                 config['name_var'].set(f"Axis {axis_idx}")
                 config['id_var'].set(str(axis_idx))
+                config['addr_var'].set("")
                 config['inv_var'].set(False)
                 config['sens_var'].set(1.0)
                 config['dead_var'].set(0.0)
             
             for i, var in self.button_vars.items():
                 var.set(str(i))
+            for i, var in self.button_addr_vars.items():
+                var.set("")
 
             for i, var in self.hat_vars.items():
                 var.set(str(i))
+            for i, var in self.hat_addr_vars.items():
+                var.set("")
                 
-            # Clear stored custom names in the active profile so update_button_labels uses defaults
+            for i, k_vars in self.keyboard_vars.items():
+                k_vars['key'].set("")
+                k_vars['addr'].set("")
+                k_vars['id'].set("")
+                
             current_profile = self.current_profile_name.get()
             if current_profile in self.profiles:
                 if "button_names" in self.profiles[current_profile]:
@@ -1203,7 +1358,7 @@ class OscWheelApp:
         name = sdl2.SDL_JoystickName(self.joystick).decode('utf-8', errors='ignore') if self.joystick else "Unknown"
         header = f"--- STREAMING ACTIVE ---\n"
         header += f"Device: {name}\n"
-        header += f"Target Output: {self.ip_entry.get()}:{self.port_entry.get()} | Addr: {self.osc_address}\n"
+        header += f"Target Output: {self.ip_entry.get()}:{self.port_entry.get()} | Base Addr: {self.osc_address}\n"
         header += f"OSC Input Port (FFB): {self.listen_port_entry.get()}\n"
         header += f"-------------------------\n"
         self.log_area.insert(tk.END, header)
@@ -1211,18 +1366,28 @@ class OscWheelApp:
         for i in sorted(self.prev_axes.keys()):
             val = self.get_axis_value(i, self.prev_axes[i])
             mapped_i = self.get_axis_id(i)
+            c_addr = self.axis_config[i]['addr_var'].get().strip() or self.osc_address
             axis_name = self.axis_config[i]['name_var'].get() if i in self.axis_config else f"Axis {i}"
-            self.log_area.insert(tk.END, f"{axis_name} (OSC ID {mapped_i}):   {val:.3f}\n")
+            self.log_area.insert(tk.END, f"{axis_name} (OSC ID {mapped_i}) [{c_addr}]:   {val:.3f}\n")
             
         for i in sorted(self.prev_buttons.keys()):
             mapped_i = self.get_button_id(i)
+            c_addr = self.button_addr_vars[i].get().strip() or self.osc_address
             btn_name = self.button_name_vars[i].get() if i in self.button_name_vars else f"Btn {i}"
-            self.log_area.insert(tk.END, f"{btn_name} (OSC ID {mapped_i}): {self.prev_buttons[i]}\n")
+            self.log_area.insert(tk.END, f"{btn_name} (OSC ID {mapped_i}) [{c_addr}]: {self.prev_buttons[i]}\n")
             
         for i in sorted(self.prev_hats.keys()):
             mapped_i = self.get_hat_id(i)
-            self.log_area.insert(tk.END, f"Hat {i} (OSC ID {mapped_i}): {self.prev_hats[i]}\n")
+            c_addr = self.hat_addr_vars[i].get().strip() or self.osc_address
+            self.log_area.insert(tk.END, f"Hat {i} (OSC ID {mapped_i}) [{c_addr}]: {self.prev_hats[i]}\n")
             
+        for i in sorted(self.prev_keys.keys()):
+            k_vars = self.keyboard_vars.get(i)
+            if k_vars and k_vars['key'].get().strip():
+                c_addr = k_vars['addr'].get().strip() or self.osc_address
+                m_id = k_vars['id'].get().strip() or str(i)
+                self.log_area.insert(tk.END, f"Key '{k_vars['key'].get()}' (OSC ID {m_id}) [{c_addr}]: {self.prev_keys[i]}\n")
+
         self.log_area.config(state='disabled')
 
     def toggle_stream(self):
@@ -1241,11 +1406,14 @@ class OscWheelApp:
             return
 
         selected_device_str = self.device_var.get()
-        if selected_device_str == "No devices found" or not selected_device_str:
-            messagebox.showerror("Device Error", "No controller selected or found. Please connect a device and click Refresh.")
+        has_device = selected_device_str and selected_device_str != "No devices found"
+        has_keys = any(v['key'].get().strip() for v in self.keyboard_vars.values()) if KEYBOARD_AVAILABLE else False
+
+        if not has_device and not has_keys:
+            messagebox.showerror("Device Error", "No controller or keyboard mappings found.")
             return
 
-        if not self.joystick:
+        if has_device and not self.joystick:
             self.on_device_selected()
 
         if self.ui_icon_on:
@@ -1284,11 +1452,11 @@ class OscWheelApp:
         if self.tray_icon and self.img_on:
             self.tray_icon.icon = self.img_on
         
-        name = sdl2.SDL_JoystickName(self.joystick).decode('utf-8', errors='ignore')
+        name = sdl2.SDL_JoystickName(self.joystick).decode('utf-8', errors='ignore') if self.joystick else "Keyboard Only"
         if self.output_mode.get() == "scroll":
             self.log(f"--- STARTED STREAMING ---")
             self.log(f"Device: {name}")
-            self.log(f"Sending to: {ip}:{port} | Address: {osc_address}")
+            self.log(f"Sending to: {ip}:{port} | Base Address: {osc_address}")
             self.log(f"Listening for FFB on port: {listen_port}")
             self.log(f"-------------------------")
         else:
@@ -1297,8 +1465,9 @@ class OscWheelApp:
         self.prev_axes.clear()
         self.prev_buttons.clear()
         self.prev_hats.clear()
+        self.prev_keys.clear()
 
-        self.poll_joystick()
+        self.poll_inputs()
 
     def stop_streaming(self):
         self.is_running = False
@@ -1395,66 +1564,98 @@ class OscWheelApp:
             x = -1
         return (x, y)
 
-    def poll_joystick(self):
+    def poll_inputs(self):
         if not self.is_running:
             return
 
-        sdl2.SDL_JoystickUpdate()
-        num_axes = sdl2.SDL_JoystickNumAxes(self.joystick)
-        num_buttons = sdl2.SDL_JoystickNumButtons(self.joystick)
-        num_hats = sdl2.SDL_JoystickNumHats(self.joystick)
-
         state_changed = False
 
-        for i in range(num_axes):
-            raw_axis_val = round(sdl2.SDL_JoystickGetAxis(self.joystick, i) / 32767.0, 3)
-            if self.prev_axes.get(i) != raw_axis_val:
-                self.prev_axes[i] = raw_axis_val
-                
-                final_val = self.get_axis_value(i, raw_axis_val)
-                mapped_axis_id = self.get_axis_id(i)
-                msg_args = ["axis", mapped_axis_id, final_val]
-                
-                self.client.send_message(self.osc_address, msg_args)
-                if self.output_mode.get() == "scroll":
-                    self.log(f"{self.osc_address} {msg_args}")
-                
-                state_changed = True
+        if self.joystick:
+            sdl2.SDL_JoystickUpdate()
+            num_axes = sdl2.SDL_JoystickNumAxes(self.joystick)
+            num_buttons = sdl2.SDL_JoystickNumButtons(self.joystick)
+            num_hats = sdl2.SDL_JoystickNumHats(self.joystick)
 
-        for i in range(num_buttons):
-            raw_btn_val = sdl2.SDL_JoystickGetButton(self.joystick, i)
-            if self.prev_buttons.get(i) != raw_btn_val:
-                self.prev_buttons[i] = raw_btn_val
-                
-                mapped_id = self.get_button_id(i)
-                msg_args = ["button", mapped_id, raw_btn_val]
-                
-                self.client.send_message(self.osc_address, msg_args)
-                if self.output_mode.get() == "scroll":
-                    # Optionally use dynamic name here, but raw OSC payload remains unchanged!
-                    self.log(f"{self.osc_address} {msg_args}")
-                
-                state_changed = True
+            for i in range(num_axes):
+                raw_axis_val = round(sdl2.SDL_JoystickGetAxis(self.joystick, i) / 32767.0, 3)
+                if self.prev_axes.get(i) != raw_axis_val:
+                    self.prev_axes[i] = raw_axis_val
+                    
+                    final_val = self.get_axis_value(i, raw_axis_val)
+                    mapped_axis_id = self.get_axis_id(i)
+                    addr = self.axis_config[i]['addr_var'].get().strip() or self.osc_address
+                    msg_args = ["axis", mapped_axis_id, final_val]
+                    
+                    self.client.send_message(addr, msg_args)
+                    if self.output_mode.get() == "scroll":
+                        self.log(f"{addr} {msg_args}")
+                    
+                    state_changed = True
 
-        for i in range(num_hats):
-            hat_bitmask = sdl2.SDL_JoystickGetHat(self.joystick, i)
-            hat_tuple = self.sdl_hat_to_tuple(hat_bitmask)
-            
-            if self.prev_hats.get(i) != hat_tuple:
-                mapped_id = self.get_hat_id(i)
-                msg_args = ["hat", mapped_id, hat_tuple[0], hat_tuple[1]]
-                self.client.send_message(self.osc_address, msg_args)
+            for i in range(num_buttons):
+                raw_btn_val = sdl2.SDL_JoystickGetButton(self.joystick, i)
+                if self.prev_buttons.get(i) != raw_btn_val:
+                    self.prev_buttons[i] = raw_btn_val
+                    
+                    mapped_id = self.get_button_id(i)
+                    addr = self.button_addr_vars[i].get().strip() or self.osc_address
+                    msg_args = ["button", mapped_id, raw_btn_val]
+                    
+                    self.client.send_message(addr, msg_args)
+                    if self.output_mode.get() == "scroll":
+                        self.log(f"{addr} {msg_args}")
+                    
+                    state_changed = True
+
+            for i in range(num_hats):
+                hat_bitmask = sdl2.SDL_JoystickGetHat(self.joystick, i)
+                hat_tuple = self.sdl_hat_to_tuple(hat_bitmask)
                 
-                if self.output_mode.get() == "scroll":
-                    self.log(f"{self.osc_address} {msg_args}")
-                
-                self.prev_hats[i] = hat_tuple
-                state_changed = True
+                if self.prev_hats.get(i) != hat_tuple:
+                    mapped_id = self.get_hat_id(i)
+                    addr = self.hat_addr_vars[i].get().strip() or self.osc_address
+                    msg_args = ["hat", mapped_id, hat_tuple[0], hat_tuple[1]]
+                    
+                    self.client.send_message(addr, msg_args)
+                    if self.output_mode.get() == "scroll":
+                        self.log(f"{addr} {msg_args}")
+                    
+                    self.prev_hats[i] = hat_tuple
+                    state_changed = True
+
+        if KEYBOARD_AVAILABLE:
+            for i, k_vars in self.keyboard_vars.items():
+                k = k_vars['key'].get().strip()
+                if k:
+                    try:
+                        is_pressed = keyboard.is_pressed(k)
+                    except ValueError:
+                        is_pressed = False
+                        
+                    val = 1 if is_pressed else 0
+                    if self.prev_keys.get(i) != val:
+                        self.prev_keys[i] = val
+                        
+                        addr = k_vars['addr'].get().strip() or self.osc_address
+                        m_id = k_vars['id'].get().strip() or str(i)
+                        
+                        try:
+                            m_id = int(m_id)
+                        except ValueError:
+                            pass
+                            
+                        msg_args = ["keyboard", m_id, val]
+                        self.client.send_message(addr, msg_args)
+                        
+                        if self.output_mode.get() == "scroll":
+                            self.log(f"{addr} {msg_args} (Key: {k})")
+                            
+                        state_changed = True
 
         if state_changed and self.output_mode.get() == "inplace":
             self.redraw_in_place()
 
-        self.update_job = self.root.after(10, self.poll_joystick)
+        self.update_job = self.root.after(10, self.poll_inputs)
 
     def on_closing(self, *args):
         self.root.after(0, self._shutdown)
