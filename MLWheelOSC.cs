@@ -22,6 +22,12 @@ public class MLWheelOSC : MonoBehaviour
     public string clientAddress = "127.0.0.1";
     public bool isClientRunning;
 
+ //   [Header("Telemetry Output Settings")]
+ //   [Tooltip("Enable sending 6-DoF pitch, roll, yaw, surge, sway, heave data out to C2O.")]
+    public bool sendMotionTelemetry = true;
+ //   [Tooltip("Enable sending Force Feedback (FFB) spring, damper, and rumble data out to C2O.")]
+    public bool sendFFBTelemetry = true;
+
     [Header("Objects")]
     public GameObject wheel;
     public GameObject colorchangeobject;
@@ -70,6 +76,7 @@ public class MLWheelOSC : MonoBehaviour
     private MarsTerrainManager terrainmanager_Script;
 
     public CarDriver_CSharp car_scriptReference;
+
     public void AddScore(int points)
     {
         currentScore += points;
@@ -109,7 +116,7 @@ public class MLWheelOSC : MonoBehaviour
         terrainmanager_Script = terrainmanager_object.GetComponent(typeof(MarsTerrainManager)) as MarsTerrainManager;
         car_scriptReference = CarObject.GetComponent(typeof(CarDriver_CSharp)) as CarDriver_CSharp;
         tokenUprightCar = this.AddEventHandler(EVENT_UPRIGHT_CAR, OnCarUprightNetwork);
-
+        isClientRunning = true;
         UpdateDashboard(); // Initial draw
     }
 
@@ -118,7 +125,6 @@ public class MLWheelOSC : MonoBehaviour
     {
         if (CarObject != null)
         {
-            // Reset the physical momentum so the car drops cleanly
             Rigidbody carRb = CarObject.GetComponent<Rigidbody>();
             if (carRb != null)
             {
@@ -126,11 +132,9 @@ public class MLWheelOSC : MonoBehaviour
                 carRb.angularVelocity = Vector3.zero;
             }
 
-            // Keep the current X and Z, but boost the Y slightly and flatten the rotation
             Vector3 currentPos = CarObject.transform.position;
-            currentPos.y += 2.0f; // Drop from 2 units above its current spot
+            currentPos.y += 2.0f;
 
-            // Flatten the rotation (Zero out X and Z roll/pitch, keep the Y yaw so it faces the same way)
             Quaternion currentRot = CarObject.transform.rotation;
             Vector3 eulerRotation = currentRot.eulerAngles;
             Quaternion flatRotation = Quaternion.Euler(0, eulerRotation.y, 0);
@@ -146,8 +150,6 @@ public class MLWheelOSC : MonoBehaviour
     private void OnCarScanNetwork(object[] args)
     {
         Log("Car attempting to scan");
-        // Non-generic grab of the Terrain Manager to trigger the visual scan response
-        
         if (terrainmanager_Script != null)
         {
             terrainmanager_Script.TriggerScan();
@@ -158,7 +160,6 @@ public class MLWheelOSC : MonoBehaviour
     {
         if (CarObject != null)
         {
-            // Reset the physical momentum so the car doesn't go flying after resetting
             Rigidbody carRb = CarObject.GetComponent<Rigidbody>();
             if (carRb != null)
             {
@@ -166,7 +167,6 @@ public class MLWheelOSC : MonoBehaviour
                 carRb.angularVelocity = Vector3.zero;
             }
 
-            // Move the car back to the starting point
             CarObject.transform.position = initialCarPosition;
             CarObject.transform.rotation = initialCarRotation;
 
@@ -193,32 +193,23 @@ public class MLWheelOSC : MonoBehaviour
         // --- AXIS INPUTS ---
         if (inputType == "axis")
         {
-            // Parse and store the value for the dashboard FIRST
             float axisValue = float.Parse(inputValue);
             axisStates[inputIndex] = axisValue;
 
-            // Then route the specific logic based on the index
             if (inputIndex == 0)
             {
-                currentOSCSteeringValue = axisValue; // Store it for the CarDriver script
+                currentOSCSteeringValue = axisValue;
 
                 if (wheel != null)
                 {
-                    // 1. Calculate the new target angle and the delta (difference) needed to get there
                     float targetAngle = axisValue * maxSteeringAngle;
                     float deltaAngle = targetAngle - currentSteeringAngle;
 
-                    // 2. Find the true visual center of the wheel's mesh, ignoring its pivot
                     Renderer wheelRenderer = wheel.GetComponent<Renderer>();
                     if (wheelRenderer != null)
                     {
                         Vector3 trueCenter = wheelRenderer.bounds.center;
-
-                        // 3. Rotate around that calculated center point. 
-                        // Using wheel.transform.forward assumes the wheel rotates like a clock face on its local Z axis.
                         wheel.transform.RotateAround(trueCenter, wheel.transform.forward, deltaAngle);
-
-                        // 4. Store the current angle for the next incoming OSC message
                         currentSteeringAngle = targetAngle;
                     }
                 }
@@ -227,34 +218,25 @@ public class MLWheelOSC : MonoBehaviour
             {
                 currentOSCGasValue = axisValue;
             }
-            else if (inputIndex == 3) // BRAKE PEDAL
+            else if (inputIndex == 3)
             {
                 currentOSCBrakeValue = axisValue;
             }
         }
 
-        // --- BUTTON COLOR CHANGE ---
+        // --- BUTTON INPUTS ---
         if (inputType == "button")
         {
             int isPressed = int.Parse(inputValue);
-            buttonStates[inputIndex] = isPressed; // Store in state dictionary
-
-            // Only trigger visual change on button press (1)
-            /*
-            if (isPressed == 1 && colorRenderer != null && inputIndex < buttonColors.Length)
-            {
-                colorRenderer.material.color = buttonColors[inputIndex];
-            }
-            */
+            buttonStates[inputIndex] = isPressed;
 
             if (inputIndex == 16 && isPressed == 1)
             {
                 Log("Reset button pressed. Broadcasting reset event...");
-                // Broadcast to all clients to reset the car
                 this.InvokeNetwork(EVENT_RESET_CAR, EventTarget.All, null);
             }
 
-            if(inputIndex == 10 && isPressed == 1)
+            if (inputIndex == 10 && isPressed == 1)
             {
                 Log("Scanner button pressed. Broadcasting reset event...");
                 this.InvokeNetwork(EVENT_SCAN, EventTarget.All, null);
@@ -263,9 +245,9 @@ public class MLWheelOSC : MonoBehaviour
             if (inputIndex == 0 && isPressed == 1)
             {
                 Log("Skip Mars Fact button pressed. Broadcasting event...");
-                if(car_scriptReference.CurrentMarsFact != null)
+                if (car_scriptReference.CurrentMarsFact != null)
                 {
-                   car_scriptReference.CurrentMarsFact.SetActive(false);
+                    car_scriptReference.CurrentMarsFact.SetActive(false);
                 }
             }
 
@@ -276,20 +258,14 @@ public class MLWheelOSC : MonoBehaviour
             }
         }
 
-        // Handle D-Pad / Hats
         else if (inputType == "hat" && args.Length >= 4)
         {
-            //   Log($"[OSC Wheel] HAT {inputIndex} changed to: X:{args[2]}, Y:{args[3]}");
             hatStates[inputIndex] = $"X: {args[2]} | Y: {args[3]}";
         }
 
         UpdateDashboard();
     }
 
-
-    /// <summary>
-    /// Builds an in-place dashboard string from the current state dictionaries.
-    /// </summary>
     private void UpdateDashboard()
     {
         if (debugText == null) return;
@@ -304,7 +280,6 @@ public class MLWheelOSC : MonoBehaviour
             sb.AppendLine("\n[ Axes ]");
             foreach (var kvp in axisStates)
             {
-                // Inject friendly names for your known axes
                 string axisName = $"Axis {kvp.Key}";
                 if (kvp.Key == 0) axisName += " (Steering)";
                 else if (kvp.Key == 1) axisName += " (Gas)";
@@ -338,24 +313,18 @@ public class MLWheelOSC : MonoBehaviour
 
     void Update()
     {
-        // Process server (receiving) and client (sending) states independently
-    //    HandleServerLogic();
-     //   HandleClientLogic();
+     //   HandleServerLogic();
+    //    HandleClientLogic();
     }
 
-    /// <summary>
-    /// Handles binding and unbinding of receiving addresses
-    /// </summary>
     private void HandleServerLogic()
     {
-        // Check if server just turned ON
         if (osc.IsServerRunning && !isServerRunning)
         {
             Log("\n (SERVER) Started running.");
             isServerRunning = true;
         }
 
-        // Check if server just turned OFF
         if (!osc.IsServerRunning && isServerRunning)
         {
             Log("\n (SERVER) Stopped running. Unbinding...");
@@ -364,36 +333,27 @@ public class MLWheelOSC : MonoBehaviour
                 osc.TryUnBindAddressPattern(oscAddressPattern);
                 isBound = false;
                 Log($"\n (SERVER) Stopped running. Unbound from {oscAddressPattern}");
-
             }
             isServerRunning = false;
         }
 
-        // If the server is running but we haven't bound the address yet, try to bind it
         if (isServerRunning && !isBound)
         {
             Log($"\n (SERVER) Attempting to bind OSC handler to: {oscAddressPattern}");
-          //  osc.TryBindAddressPattern(oscAddressPattern, OnOSCMessage);
             Log($" osc.TryBindAddressPattern(oscAddressPattern, OnOSCMessage) : {osc.TryBindAddressPattern(oscAddressPattern, OnOSCMessage)}");
             Log($"\n osc.HasAddress(oscAddressPattern) : {osc.HasAddress(oscAddressPattern)} Bound to : {oscAddressPattern}");
             isBound = true;
         }
     }
 
-    /// <summary>
-    /// Handles the connection state for sending messages outward
-    /// </summary>
     private void HandleClientLogic()
     {
-        // Check if client just turned ON
         if (osc.IsClientRunning && !isClientRunning)
         {
             Log("\n (CLIENT) Started running. Ready to send.");
             isClientRunning = true;
-            // osc.SendMessage(clientAddress, "testing 123");
         }
 
-        // Check if client just turned OFF
         if (!osc.IsClientRunning && isClientRunning)
         {
             Log("\n (CLIENT) Stopped running.");
@@ -401,21 +361,23 @@ public class MLWheelOSC : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Public helper method to allow other scripts to send OSC messages easily
-    /// </summary>
     public void SendOutgoingMessage(string message)
     {
         if (isClientRunning)
         {
-            //if you want to send an outgoing message : 
-            //it is possible too.
             // osc.SendMessage(clientAddress, message);
             Log($"\n (CLIENT) Sent message: {message}");
         }
-        else
-        {
-            Log("\n (CLIENT ERROR) Attempted to send message, but client is not running.");
-        }
+    }
+
+    /// <summary>
+    /// Formats and sends standard OSC Float data (used for Motion/FFB to C2O)
+    /// </summary>
+    public void SendOSCFloat(string address, float value)
+    {
+     //   if (isClientRunning)
+     //   {
+            osc.SendMessage(address, value);
+     //   }
     }
 }
