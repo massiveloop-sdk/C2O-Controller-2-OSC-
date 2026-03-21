@@ -517,6 +517,7 @@ public class CarDriver_CSharp : MonoBehaviour
 
         localControlIndicator.SetActive(underLocalPlayerControl);
 
+        /* disabled to help performance
         if (oscWheelScript != null)
         {
             debugText.text = $"Engine RPM: {carEngine.rpm}\nCurrent Gear: {currentGear}\nThrottle: {throttle:F3}\nDirection: {direction}\nEngine State: {carEngine.state}\n OSC Steering Value : {oscWheelScript.currentOSCSteeringValue}\n OSC gas value {oscWheelScript.currentOSCGasValue}\n OSC brake value : {oscWheelScript.currentOSCBrakeValue}  ";
@@ -525,6 +526,7 @@ public class CarDriver_CSharp : MonoBehaviour
         {
             debugText.text = $"Engine RPM: {carEngine.rpm}\nCurrent Gear: {currentGear}\nThrottle: {throttle:F3}\nDirection: {direction}\nEngine State: {carEngine.state}\n ";
         }
+        */
 
         if (underLocalPlayerControl)
         {

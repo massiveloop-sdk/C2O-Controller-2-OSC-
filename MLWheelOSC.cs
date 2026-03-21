@@ -263,7 +263,8 @@ public class MLWheelOSC : MonoBehaviour
             hatStates[inputIndex] = $"X: {args[2]} | Y: {args[3]}";
         }
 
-        UpdateDashboard();
+        //disabled to help performance
+      //  UpdateDashboard();
     }
 
     private void UpdateDashboard()
