@@ -1,4 +1,4 @@
-* # CTRL 2 OSC (C2O) - V3.3 C# Edition
+# CTRL 2 OSC (C2O) - V3.3 C# Edition
 
   A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments. 
 
