@@ -1,10 +1,10 @@
 * # CTRL 2 OSC (C2O) - V3.3 C# Edition
 
-  A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments[cite: 12, 13]. 
+  A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments. 
 
-  C2O reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards[cite: 13]. It captures everything from continuous analog axes (pedals, throttles, analog sticks) to discrete button presses, global keystrokes, and D-pad movements[cite: 13]. It translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware[cite: 14]. 
+  C2O reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards. It captures everything from continuous analog axes (pedals, throttles, analog sticks) to discrete button presses, global keystrokes, and D-pad movements. It translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware. 
 
-  Originally developed as a versatile solution for mapping physical simulation hardware to Massive Loop [cite: 15], C2O V3.3 has been completely rebuilt in C# / WPF for native Windows performance[cite: 11, 12]. It now features advanced two-way OSC communication for dynamic Force Feedback (FFB) and a dedicated Motion Platform Forwarding engine for Sim Racing and Flight Sim rigs[cite: 11, 12].
+  Originally developed as a versatile solution for mapping physical simulation hardware to Massive Loop, C2O V3.3 has been completely rebuilt in C# / WPF for native Windows performance. It now features advanced two-way OSC communication for dynamic Force Feedback (FFB) and a dedicated Motion Platform Forwarding engine for Sim Racing and Flight Sim rigs.
 
   Youtube Video Demo:
 
@@ -13,7 +13,7 @@
   ## Key Features
 
   * **Native C# Performance:** Rebuilt from the ground up in .NET/WPF, utilizing a dedicated multi-threaded high-speed loop purely for hardware polling via SDL2 and OSC broadcasting.
-  * **Multi-Device & Keyboard Support:** Capture inputs from multiple different hardware devices simultaneously, or map global keyboard keystrokes and combinations directly to OSC outputs[cite: 13].
+  * **Multi-Device & Keyboard Support:** Capture inputs from multiple different hardware devices simultaneously, or map global keyboard keystrokes and combinations directly to OSC outputs.
   * **Motion Platform Forwarding (New in V3.3):** Route incoming 6-DoF OSC telemetry directly to your motion platform's UDP port[cite: 87]. Includes Per-Axis High-Pass Washout Filters, Gain/Smoothing adjustments, SimTools String translation, and a Safety Heartbeat timeout to auto-zero your rig on disconnect[cite: 26, 88].
   * **Expanded Hardware FFB (Two-Way OSC):** Supports incoming OSC messages to control Constant Force, Centering Spring, Damper (Weight), Static Friction, and standard Gamepad Rumble[cite: 20, 21, 22]. Includes a built-in FFB Tester and Signal Clipping Monitor[cite: 74, 76].
   * **Advanced Axis Tuning:** Fine-tune your controls on a per-axis basis with adjustable Deadzones, Sensitivity multipliers, Non-linear Curves, and Exponential Moving Average (EMA) Smoothing.
@@ -71,10 +71,10 @@
 
   Only values that have changed since the last frame are broadcasted to save bandwidth. Custom OSC addresses mapped in the UI will replace the `[Address]` field; otherwise, it defaults to your Base OSC Address.
 
-  * **Axes (Steering, Pedals):** `[Address] "axis" [Mapped ID] [Float Value]` [cite: 17]
-  * **Buttons (Shifters, Face Buttons):** `[Address] "button" [Mapped ID] [Int Value (0/1)]` [cite: 18]
-  * **Hats (D-Pads):** `[Address] "hat" [Mapped ID] [Int X] [Int Y]` [cite: 18, 19]
-  * **Keyboard (Global Keys):** `[Address] "keyboard" [Mapped ID] [Int Value (0/1)]` [cite: 19, 20]
+  * **Axes (Steering, Pedals):** `[Address] "axis" [Mapped ID] [Float Value]`
+  * **Buttons (Shifters, Face Buttons):** `[Address] "button" [Mapped ID] [Int Value (0/1)]`
+  * **Hats (D-Pads):** `[Address] "hat" [Mapped ID] [Int X] [Int Y]`
+  * **Keyboard (Global Keys):** `[Address] "keyboard" [Mapped ID] [Int Value (0/1)]`
 
   ### 2. Input (Receiving FFB & Rumble commands)
 
@@ -90,12 +90,12 @@
 
   Send your rig's telemetry to C2O. It will process the signals (applying your configured Washout filters and Gain) and forward them to your motion platform hardware[cite: 25, 26].
 
-  * `/motion/pitch [Float]`: Forward/Backward Tilt [cite: 23]
-  * `/motion/roll [Float]`: Left/Right Tilt [cite: 23]
-  * `/motion/yaw [Float]`: Left/Right Rotation [cite: 24]
-  * `/motion/surge [Float]`: Forward/Backward Acceleration [cite: 24]
-  * `/motion/sway [Float]`: Left/Right Acceleration [cite: 25]
-  * `/motion/heave [Float]`: Up/Down Acceleration [cite: 25]
+  * `/motion/pitch [Float]`: Forward/Backward Tilt
+  * `/motion/roll [Float]`: Left/Right Tilt
+  * `/motion/yaw [Float]`: Left/Right Rotation
+  * `/motion/surge [Float]`: Forward/Backward Acceleration
+  * `/motion/sway [Float]`: Left/Right Acceleration
+  * `/motion/heave [Float]`: Up/Down Acceleration
 
   ---
 
