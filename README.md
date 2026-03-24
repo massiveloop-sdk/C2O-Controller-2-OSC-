@@ -1,10 +1,10 @@
 * # CTRL 2 OSC (C2O) - V3.3 C# Edition
 
-  [cite_start]A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments[cite: 12, 13]. 
+  A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments[cite: 12, 13]. 
 
-  [cite_start]C2O reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards[cite: 13]. [cite_start]It captures everything from continuous analog axes (pedals, throttles, analog sticks) to discrete button presses, global keystrokes, and D-pad movements[cite: 13]. [cite_start]It translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware[cite: 14]. 
+  C2O reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards[cite: 13]. It captures everything from continuous analog axes (pedals, throttles, analog sticks) to discrete button presses, global keystrokes, and D-pad movements[cite: 13]. It translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware[cite: 14]. 
 
-  [cite_start]Originally developed as a versatile solution for mapping physical simulation hardware to Massive Loop [cite: 15][cite_start], C2O V3.3 has been completely rebuilt in C# / WPF for native Windows performance[cite: 11, 12]. [cite_start]It now features advanced two-way OSC communication for dynamic Force Feedback (FFB) and a dedicated Motion Platform Forwarding engine for Sim Racing and Flight Sim rigs[cite: 11, 12].
+  Originally developed as a versatile solution for mapping physical simulation hardware to Massive Loop [cite: 15], C2O V3.3 has been completely rebuilt in C# / WPF for native Windows performance[cite: 11, 12]. It now features advanced two-way OSC communication for dynamic Force Feedback (FFB) and a dedicated Motion Platform Forwarding engine for Sim Racing and Flight Sim rigs[cite: 11, 12].
 
   Youtube Video Demo:
 
@@ -13,11 +13,11 @@
   ## Key Features
 
   * **Native C# Performance:** Rebuilt from the ground up in .NET/WPF, utilizing a dedicated multi-threaded high-speed loop purely for hardware polling via SDL2 and OSC broadcasting.
-  * [cite_start]**Multi-Device & Keyboard Support:** Capture inputs from multiple different hardware devices simultaneously, or map global keyboard keystrokes and combinations directly to OSC outputs[cite: 13].
-  * [cite_start]**Motion Platform Forwarding (New in V3.3):** Route incoming 6-DoF OSC telemetry directly to your motion platform's UDP port[cite: 87]. [cite_start]Includes Per-Axis High-Pass Washout Filters, Gain/Smoothing adjustments, SimTools String translation, and a Safety Heartbeat timeout to auto-zero your rig on disconnect[cite: 26, 88].
-  * [cite_start]**Expanded Hardware FFB (Two-Way OSC):** Supports incoming OSC messages to control Constant Force, Centering Spring, Damper (Weight), Static Friction, and standard Gamepad Rumble[cite: 20, 21, 22]. [cite_start]Includes a built-in FFB Tester and Signal Clipping Monitor[cite: 74, 76].
+  * **Multi-Device & Keyboard Support:** Capture inputs from multiple different hardware devices simultaneously, or map global keyboard keystrokes and combinations directly to OSC outputs[cite: 13].
+  * **Motion Platform Forwarding (New in V3.3):** Route incoming 6-DoF OSC telemetry directly to your motion platform's UDP port[cite: 87]. Includes Per-Axis High-Pass Washout Filters, Gain/Smoothing adjustments, SimTools String translation, and a Safety Heartbeat timeout to auto-zero your rig on disconnect[cite: 26, 88].
+  * **Expanded Hardware FFB (Two-Way OSC):** Supports incoming OSC messages to control Constant Force, Centering Spring, Damper (Weight), Static Friction, and standard Gamepad Rumble[cite: 20, 21, 22]. Includes a built-in FFB Tester and Signal Clipping Monitor[cite: 74, 76].
   * **Advanced Axis Tuning:** Fine-tune your controls on a per-axis basis with adjustable Deadzones, Sensitivity multipliers, Non-linear Curves, and Exponential Moving Average (EMA) Smoothing.
-  * [cite_start]**Built-in Incoming OSC Monitor:** Easily debug and read incoming telemetry or FFB signals natively inside the app via a scrolling terminal or in-place dashboard[cite: 118, 123].
+  * **Built-in Incoming OSC Monitor:** Easily debug and read incoming telemetry or FFB signals natively inside the app via a scrolling terminal or in-place dashboard[cite: 118, 123].
   * **Profile Management:** Save, clone, export, and import your configurations as `.json` files to easily share setups or swap between different simulation rigs.
 
   ---
@@ -71,35 +71,35 @@
 
   Only values that have changed since the last frame are broadcasted to save bandwidth. Custom OSC addresses mapped in the UI will replace the `[Address]` field; otherwise, it defaults to your Base OSC Address.
 
-  * [cite_start]**Axes (Steering, Pedals):** `[Address] "axis" [Mapped ID] [Float Value]` [cite: 17]
-  * [cite_start]**Buttons (Shifters, Face Buttons):** `[Address] "button" [Mapped ID] [Int Value (0/1)]` [cite: 18]
-  * [cite_start]**Hats (D-Pads):** `[Address] "hat" [Mapped ID] [Int X] [Int Y]` [cite: 18, 19]
-  * [cite_start]**Keyboard (Global Keys):** `[Address] "keyboard" [Mapped ID] [Int Value (0/1)]` [cite: 19, 20]
+  * **Axes (Steering, Pedals):** `[Address] "axis" [Mapped ID] [Float Value]` [cite: 17]
+  * **Buttons (Shifters, Face Buttons):** `[Address] "button" [Mapped ID] [Int Value (0/1)]` [cite: 18]
+  * **Hats (D-Pads):** `[Address] "hat" [Mapped ID] [Int X] [Int Y]` [cite: 18, 19]
+  * **Keyboard (Global Keys):** `[Address] "keyboard" [Mapped ID] [Int Value (0/1)]` [cite: 19, 20]
 
   ### 2. Input (Receiving FFB & Rumble commands)
 
   Send these commands to C2O's configured Listen Port (default `4042`) to trigger haptics on supported hardware.
 
-  * [cite_start]`/ffb/force [Float 0-100]`: Adjusts constant Cartesian pull[cite: 20].
-  * [cite_start]`/ffb/spring [Float 0-100]`: Adjusts centering resistance[cite: 21].
-  * [cite_start]`/ffb/damper [Float 0-100]`: Adjusts dynamic wheel weight[cite: 21].
-  * [cite_start]`/ffb/friction [Float 0-100]`: Adjusts static friction[cite: 21, 22].
-  * [cite_start]`/ffb/rumble [Float 0-100]`: Triggers standard gamepad rumble[cite: 22].
+  * `/ffb/force [Float 0-100]`: Adjusts constant Cartesian pull[cite: 20].
+  * `/ffb/spring [Float 0-100]`: Adjusts centering resistance[cite: 21].
+  * `/ffb/damper [Float 0-100]`: Adjusts dynamic wheel weight[cite: 21].
+  * `/ffb/friction [Float 0-100]`: Adjusts static friction[cite: 21, 22].
+  * `/ffb/rumble [Float 0-100]`: Triggers standard gamepad rumble[cite: 22].
 
   ### 3. Motion Telemetry (6-DoF Forwarding)
 
-  Send your rig's telemetry to C2O. [cite_start]It will process the signals (applying your configured Washout filters and Gain) and forward them to your motion platform hardware[cite: 25, 26].
+  Send your rig's telemetry to C2O. It will process the signals (applying your configured Washout filters and Gain) and forward them to your motion platform hardware[cite: 25, 26].
 
-  * [cite_start]`/motion/pitch [Float]`: Forward/Backward Tilt [cite: 23]
-  * [cite_start]`/motion/roll [Float]`: Left/Right Tilt [cite: 23]
-  * [cite_start]`/motion/yaw [Float]`: Left/Right Rotation [cite: 24]
-  * [cite_start]`/motion/surge [Float]`: Forward/Backward Acceleration [cite: 24]
-  * [cite_start]`/motion/sway [Float]`: Left/Right Acceleration [cite: 25]
-  * [cite_start]`/motion/heave [Float]`: Up/Down Acceleration [cite: 25]
+  * `/motion/pitch [Float]`: Forward/Backward Tilt [cite: 23]
+  * `/motion/roll [Float]`: Left/Right Tilt [cite: 23]
+  * `/motion/yaw [Float]`: Left/Right Rotation [cite: 24]
+  * `/motion/surge [Float]`: Forward/Backward Acceleration [cite: 24]
+  * `/motion/sway [Float]`: Left/Right Acceleration [cite: 25]
+  * `/motion/heave [Float]`: Up/Down Acceleration [cite: 25]
 
   ---
 
   ## Notes
 
-  * [cite_start]**Motion Kill Switch:** If your motion platform behaves unexpectedly, hit the red "MOTION KILL SWITCH" in the Motion tab to instantly send a zeroed payload to your rig and halt movement[cite: 92, 93].
-  * [cite_start]**Dashboard Output:** In both the Output and Incoming Monitor tabs, you can switch the visualizer from a "Scrolling Log" (showing every packet) to an "In-Place Dashboard" (showing the current static state) to drastically reduce UI rendering load during gameplay[cite: 41, 42, 123].
+  * **Motion Kill Switch:** If your motion platform behaves unexpectedly, hit the red "MOTION KILL SWITCH" in the Motion tab to instantly send a zeroed payload to your rig and halt movement[cite: 92, 93].
+  * **Dashboard Output:** In both the Output and Incoming Monitor tabs, you can switch the visualizer from a "Scrolling Log" (showing every packet) to an "In-Place Dashboard" (showing the current static state) to drastically reduce UI rendering load during gameplay[cite: 41, 42, 123].
