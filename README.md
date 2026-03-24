@@ -1,122 +1,105 @@
-# CTRL 2 OSC (C2O)
+* # CTRL 2 OSC (C2O) - V3.3 C# Edition
 
-A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments. 
+  [cite_start]A lightweight, GUI-driven application designed to seamlessly bridge the gap between physical hardware and digital environments[cite: 12, 13]. 
 
-C2O reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards. It captures everything from continuous analog axes (pedals, throttles, analog sticks) to discrete button presses, global keystrokes, and D-pad movements. It translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware. 
+  [cite_start]C2O reads real-time data from connected USB steering wheels, Bluetooth gamepads, joysticks, and keyboards[cite: 13]. [cite_start]It captures everything from continuous analog axes (pedals, throttles, analog sticks) to discrete button presses, global keystrokes, and D-pad movements[cite: 13]. [cite_start]It translates and broadcasts these inputs over a local network using the Open Sound Control (OSC) protocol, ensuring low-latency communication without the need for heavy middleware[cite: 14]. 
 
-C2O was originally developed as a versatile solution for mapping physical simulation hardware to Massive Loop, and features **two-way OSC communication**, allowing remote software to send Force Feedback (FFB) commands back to the application to dynamically adjust steering wheel resistance in real-time.
+  [cite_start]Originally developed as a versatile solution for mapping physical simulation hardware to Massive Loop [cite: 15][cite_start], C2O V3.3 has been completely rebuilt in C# / WPF for native Windows performance[cite: 11, 12]. [cite_start]It now features advanced two-way OSC communication for dynamic Force Feedback (FFB) and a dedicated Motion Platform Forwarding engine for Sim Racing and Flight Sim rigs[cite: 11, 12].
 
-Youtube Video Demo :
+  Youtube Video Demo:
 
-[![Massive Loop | OSC Vehicle Showcase](https://img.youtube.com/vi/9N-i8Vs3JMc/0.jpg)](https://www.youtube.com/watch?v=9N-i8Vs3JMc)
+  [![Massive Loop | OSC Vehicle Showcase](https://img.youtube.com/vi/vynb3MnTXRs/0.jpg)]([Massive Loop | Mars Rover Experience](https://www.youtube.com/watch?v=vynb3MnTXRs))
 
-## Key Features
+  ## Key Features
 
-* **Multi-Device & Keyboard Support:** Capture inputs from multiple different hardware devices simultaneously, or map global keyboard keystrokes and combinations directly to OSC outputs.
-* **Modern UI & Dynamic Previews:** Features a clean Azure TTK theme (with Dark/Light modes) and real-time UI visualization that automatically adapts to your connected device. Buttons, axes, and keys dynamically glow in the UI upon activation.
-* **Advanced Axis Tuning:** Fine-tune your controls on a per-axis basis with adjustable Deadzones, Sensitivity multipliers, Non-linear Curves, and Exponential Moving Average (EMA) Smoothing.
-* **Customizable OSC Routing:** Broadcast to a Base OSC Address, or override the routing entirely with custom OSC addresses on a per-axis, per-button, or per-key basis.
-* **Smart Auto-Detection:** Automatically detects device types and labels buttons with their true hardware names (PlayStation, Xbox, Nintendo, and popular racing wheels).
-* **Two-Way OSC (Hardware FFB):** Supports incoming OSC messages to control Centering Spring, Damper (Weight), and Static Friction on compatible steering wheels.
-* **High-Performance Polling:** Utilizes multi-threading to dedicate a separate, high-speed loop purely for hardware polling and OSC broadcasting.
+  * **Native C# Performance:** Rebuilt from the ground up in .NET/WPF, utilizing a dedicated multi-threaded high-speed loop purely for hardware polling via SDL2 and OSC broadcasting.
+  * [cite_start]**Multi-Device & Keyboard Support:** Capture inputs from multiple different hardware devices simultaneously, or map global keyboard keystrokes and combinations directly to OSC outputs[cite: 13].
+  * [cite_start]**Motion Platform Forwarding (New in V3.3):** Route incoming 6-DoF OSC telemetry directly to your motion platform's UDP port[cite: 87]. [cite_start]Includes Per-Axis High-Pass Washout Filters, Gain/Smoothing adjustments, SimTools String translation, and a Safety Heartbeat timeout to auto-zero your rig on disconnect[cite: 26, 88].
+  * [cite_start]**Expanded Hardware FFB (Two-Way OSC):** Supports incoming OSC messages to control Constant Force, Centering Spring, Damper (Weight), Static Friction, and standard Gamepad Rumble[cite: 20, 21, 22]. [cite_start]Includes a built-in FFB Tester and Signal Clipping Monitor[cite: 74, 76].
+  * **Advanced Axis Tuning:** Fine-tune your controls on a per-axis basis with adjustable Deadzones, Sensitivity multipliers, Non-linear Curves, and Exponential Moving Average (EMA) Smoothing.
+  * [cite_start]**Built-in Incoming OSC Monitor:** Easily debug and read incoming telemetry or FFB signals natively inside the app via a scrolling terminal or in-place dashboard[cite: 118, 123].
+  * **Profile Management:** Save, clone, export, and import your configurations as `.json` files to easily share setups or swap between different simulation rigs.
 
----
+  ---
 
-## Quick Start (Standalone Executable)
+  ## Quick Start (Standalone Executable)
 
-For the easiest setup, you can use the pre-compiled `.exe` file. No Python installation is required.
+  For the easiest setup, use the pre-compiled `.exe` file.
 
-1. **Download the Release:** Grab the latest `C2O.exe` from the repository releases.
-2. **Setup Assets:** Ensure the application icons and UI theme are in the **same directory** as the `.exe`:
-   * `steering-wheel-car_off.png`
-   * `steering-wheel-car_on.png`
-   * `azure.tcl` (and associated theme folders, if applicable)
-3. **Run:** Double-click `C2O.exe` to launch the application.
-4. **Configure & Stream:** Select your input device(s), map your target IP/Ports in the Output Settings, and click **Start Streaming**.
+  1. **Download the Release:** Grab the latest C2O release from the repository.
+  2. **Setup Dependencies:** Ensure `SDL2.dll` is located in the **same directory** as your executable so the application can read USB hardware.
+  3. **Run:** Double-click the `.exe` to launch the application.
+  4. **Configure & Stream:** Select your input device(s), map your target IP/Ports in the Output Settings, and click **Start Streaming**.
 
----
+  ---
 
-## Running from Source (Python Setup)
+  ## Building from Source (C# / .NET)
 
-If you prefer to run the script directly or want to modify the code, you will need Python 3.x.
+  If you wish to modify the code or build it yourself, you will need Visual Studio and the .NET SDK. Python is no longer required.
 
-### Dependencies
+  ### Dependencies
 
-Install the required dependencies using `pip`:
+  Ensure your project has the following dependencies configured (usually via NuGet):
+  * **`CoreOSC`**: Handles formatting and transmitting/receiving UDP network packets.
+  * **`SDL2-CS`** (or raw SDL2 bindings): Handles underlying USB device polling, input event loops, and Force Feedback (haptics) drivers.
 
-```
-pip install pysdl2 python-osc Pillow pystray keyboard sv_ttk
-```
+  ### Execution
 
-* **`pysdl2`**: Handles underlying USB device polling, input event loops, and Force Feedback (haptics) drivers. 
-* **`python-osc`**: Formats and transmits/receives the UDP network packets.
-* **`Pillow`**: Processes the `.png` icons for the GUI and system tray.
-* **`pystray`**: Manages the background system tray icon and menu.
-* **`keyboard`**: Enables global key polling and combinations for direct keyboard-to-OSC mapping.
-* **`sv_ttk`**: (Optional/Fallback) Modern UI theme rendering.
+  1. Open the `.sln` or `.csproj` file in Visual Studio.
+  2. Ensure the required `steering-wheel-car_on.png` and `steering-wheel-car_off.png` assets are set as Embedded Resources or are present in the build directory.
+  3. Build and run the solution.
 
-### Execution
+  ---
 
-With your controller connected and your assets in the same folder, run the script from your terminal:
+  ## Localized Testing
 
-```
-python wheel_to_osc.py
-```
+  If you want to verify that C2O is formatting the OSC packets correctly before integrating it with your target software:
 
----
+  1. **Target Localhost:** In the Output Settings, set the **Target IP** to `127.0.0.1`.
+  2. **Set the Port:** Set the **Target Port (Send)** to `4041` (or your preferred test port).
+  3. **Use an OSC Monitor:** Download a free OSC monitoring tool (such as [Protokol](https://hexler.net/protokol)).
+  4. **Listen:** Configure your monitoring tool to listen on your chosen port.
+  5. **Test Inputs:** Click **Start Streaming** in C2O. Move your axes or press buttons; you should see the formatted OSC arrays arriving in your monitor.
 
-## Localized Testing
+  *(Note: You can also use C2O's built-in "Incoming OSC Monitor" tab to test signals being sent back to the app on port `4042`.)*
 
-If you want to verify that C2O is reading your inputs and formatting the OSC packets correctly before integrating it with your target software, you can run a localized test:
+  ---
 
-1. **Target Localhost:** In the C2O Output Settings, set the **Target IP** to `127.0.0.1`.
-2. **Set the Port:** Set the **Target Port (Send)** to `4041` (or your preferred test port).
-3. **Use an OSC Monitor:** Download a free OSC monitoring tool (such as [Protokol](https://hexler.net/protokol)) or run a simple Python OSC listener script.
-4. **Listen:** Configure your monitoring tool to listen on port `4041`.
-5. **Test Inputs:** Click **Start Streaming** in C2O. Move your axes, press buttons, or hit mapped keyboard keys; you should see the formatted OSC arrays arriving in your monitor in real-time.
+  ## OSC Payload Formats
 
----
+  ### 1. Output (Sending from C2O to your software)
 
-## Input Profiles
+  Only values that have changed since the last frame are broadcasted to save bandwidth. Custom OSC addresses mapped in the UI will replace the `[Address]` field; otherwise, it defaults to your Base OSC Address.
 
-You can save different device layouts, tuning parameters, and network configurations using the **Input Profile** manager at the top of the Input Settings page. 
+  * [cite_start]**Axes (Steering, Pedals):** `[Address] "axis" [Mapped ID] [Float Value]` [cite: 17]
+  * [cite_start]**Buttons (Shifters, Face Buttons):** `[Address] "button" [Mapped ID] [Int Value (0/1)]` [cite: 18]
+  * [cite_start]**Hats (D-Pads):** `[Address] "hat" [Mapped ID] [Int X] [Int Y]` [cite: 18, 19]
+  * [cite_start]**Keyboard (Global Keys):** `[Address] "keyboard" [Mapped ID] [Int Value (0/1)]` [cite: 19, 20]
 
-* Click **New Profile** to create a fresh setup for a different controller.
-* Click **Save Settings** to write your current configuration to the local `config.json` file.
-* Profiles load automatically the next time you boot the application.
+  ### 2. Input (Receiving FFB & Rumble commands)
 
----
+  Send these commands to C2O's configured Listen Port (default `4042`) to trigger haptics on supported hardware.
 
-## OSC Payload Formats
+  * [cite_start]`/ffb/force [Float 0-100]`: Adjusts constant Cartesian pull[cite: 20].
+  * [cite_start]`/ffb/spring [Float 0-100]`: Adjusts centering resistance[cite: 21].
+  * [cite_start]`/ffb/damper [Float 0-100]`: Adjusts dynamic wheel weight[cite: 21].
+  * [cite_start]`/ffb/friction [Float 0-100]`: Adjusts static friction[cite: 21, 22].
+  * [cite_start]`/ffb/rumble [Float 0-100]`: Triggers standard gamepad rumble[cite: 22].
 
-### 1. Output (Sending from C2O to your software)
+  ### 3. Motion Telemetry (6-DoF Forwarding)
 
-When the stream is active, the application sends out messages in a multi-argument format. Only values that have changed since the last frame are broadcasted to save bandwidth. Custom OSC addresses mapped in the UI will replace the `[Address]` field; otherwise, it defaults to the Base OSC Address.
+  Send your rig's telemetry to C2O. [cite_start]It will process the signals (applying your configured Washout filters and Gain) and forward them to your motion platform hardware[cite: 25, 26].
 
-* **Axes (Steering, Pedals, Joysticks):** `[Address] "axis" [Axis Mapped ID] [Float Value]`
-  * *Example:* `/wheel/input axis 0 0.452`
-* **Buttons (Shifters, Face Buttons):** `[Address] "button" [Button Mapped ID] [Int Value (0 or 1)]`
-  * *Example:* `/wheel/input button 3 1`
-* **Hats (D-Pads):** `[Address] "hat" [Hat Mapped ID] [X Int (-1, 0, 1)] [Y Int (-1, 0, 1)]`
-  * *Example:* `/wheel/input hat 0 1 -1`
-* **Keyboard (Global Keys):** `[Address] "keyboard" [Key Mapped ID] [Int Value (0 or 1)]`
-  * *Example:* `/avatar/parameters/Jump keyboard 1 1`
+  * [cite_start]`/motion/pitch [Float]`: Forward/Backward Tilt [cite: 23]
+  * [cite_start]`/motion/roll [Float]`: Left/Right Tilt [cite: 23]
+  * [cite_start]`/motion/yaw [Float]`: Left/Right Rotation [cite: 24]
+  * [cite_start]`/motion/surge [Float]`: Forward/Backward Acceleration [cite: 24]
+  * [cite_start]`/motion/sway [Float]`: Left/Right Acceleration [cite: 25]
+  * [cite_start]`/motion/heave [Float]`: Up/Down Acceleration [cite: 25]
 
-### 2. Input (Receiving FFB commands from your software)
+  ---
 
-If your connected device supports haptic feedback (like a Sim Racing Wheel), your game engine or remote application can send OSC floats to C2O's configured Listen Port to dynamically alter the wheel resistance.
+  ## Notes
 
-* **Centering Spring:** `/ffb/spring [Float 0.0 - 100.0]`
-  * Adjusts the overall stiffness and auto-centering force.
-* **Damper:** `/ffb/damper [Float 0.0 - 100.0]`
-  * Adjusts the dynamic weight and sluggishness of the wheel.
-* **Friction:** `/ffb/friction [Float 0.0 - 100.0]`
-  * Adjusts the static surface friction.
-
----
-
-## Notes
-
-* **Background Operation:** The app features a system tray icon. You can minimize the application and it will continue to stream data seamlessly in the background. Right-click the system tray icon to pause the stream, show the window, or quit the app.
-* **Dashboard Output:** In the "Output Settings" tab, you can switch the output visualizer from a "Scrolling Log" (showing every packet sent) to an "In-Place Dashboard" (showing the current static state of all inputs) to reduce UI rendering load.
-* **Windows Taskbar:** The script uses a `ctypes` AppUserModelID trick to separate the application icon from the default Python taskbar grouping on Windows.
+  * [cite_start]**Motion Kill Switch:** If your motion platform behaves unexpectedly, hit the red "MOTION KILL SWITCH" in the Motion tab to instantly send a zeroed payload to your rig and halt movement[cite: 92, 93].
+  * [cite_start]**Dashboard Output:** In both the Output and Incoming Monitor tabs, you can switch the visualizer from a "Scrolling Log" (showing every packet) to an "In-Place Dashboard" (showing the current static state) to drastically reduce UI rendering load during gameplay[cite: 41, 42, 123].
