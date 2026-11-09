@@ -21,6 +21,8 @@ using System.Text;
 using C2O.Serialization;
 using C2O.VJoy;
 using System.Diagnostics;
+using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 
 namespace C2O
 {
@@ -88,6 +90,49 @@ namespace C2O
         private volatile bool _isIncomingLoggingEnabled = false;
         private volatile bool _isIncomingScrollMode = true;
 
+        // NAudio Tactile Routing Variables
+        private WaveOutEvent? _tactileWaveOut;
+        private SignalGenerator? _tactileSineWave;
+        private VolumeSampleProvider? _tactileVolumeController;
+        
+        // Individual envelope buffers so we can mix them together
+        private float _tactileVolEngine = 0f;
+        private float _tactileVolWind = 0f;
+        private float _tactileVolImpact = 0f;
+
+        //Audio support,
+        /*
+        We need to spin up the 40Hz sine wave as soon as C2O boots, but keep it muted (Volume = 0) until telemetry arrives.
+        */
+        private void InitTactileAudio()
+        {
+            try
+            {
+                _tactileWaveOut = new WaveOutEvent();
+                _tactileSineWave = new SignalGenerator()
+                {
+                    Gain = 1.0,           // Max base amplitude
+                    Frequency = 40.0,     // 40Hz is the sweet spot for Buttkickers
+                    Type = SignalGeneratorType.Sin
+                };
+                
+                // Wrap the generator in a volume controller so we can dynamically adjust it
+                _tactileVolumeController = new VolumeSampleProvider(_tactileSineWave)
+                {
+                    Volume = 0.0f         // Start completely silent
+                };
+
+                _tactileWaveOut.Init(_tactileVolumeController);
+                _tactileWaveOut.Play();   // Start pumping the silent stream to the soundcard
+                
+                LogScroll("[TACTILE AUDIO] NAudio 40Hz LFE Stream initialized successfully.");
+            }
+            catch (Exception ex)
+            {
+                LogScroll($"[TACTILE AUDIO ERROR] Failed to init NAudio: {ex.Message}");
+            }
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -105,6 +150,8 @@ namespace C2O
             
             SDL.SDL_Init(SDL.SDL_INIT_JOYSTICK | SDL.SDL_INIT_HAPTIC);
             RefreshDevices();
+
+            InitTactileAudio();
 
             _uiTimer = new DispatcherTimer();
             _uiTimer.Interval = TimeSpan.FromMilliseconds(50); 
@@ -165,6 +212,14 @@ namespace C2O
                 if (device.Haptic != IntPtr.Zero) SDL.SDL_HapticClose(device.Haptic);
                 if (device.Joystick != IntPtr.Zero) SDL.SDL_JoystickClose(device.Joystick);
             }
+
+            //To stop the audio when you close the app
+            if (_tactileWaveOut != null)
+            {
+                _tactileWaveOut.Stop();
+                _tactileWaveOut.Dispose();
+            }
+
             SDL.SDL_Quit();
         }
 
@@ -537,6 +592,25 @@ namespace C2O
 
                     IncomingLogArea.Text = sb.ToString();
                 }
+            }
+
+            // --- Tactile Impact Decay ---
+            // Naturally fade out crash/impact vibrations if no new OSC impact messages arrive
+            if (_tactileVolImpact > 0)
+            {
+                _tactileVolImpact -= 0.1f; // Decay speed
+                if (_tactileVolImpact < 0) _tactileVolImpact = 0;
+
+                // Update the soundcard output with the decayed mix
+                if (_tactileVolumeController != null)
+                {
+                    _tactileVolumeController.Volume = Math.Clamp(_tactileVolEngine + _tactileVolWind + _tactileVolImpact, 0f, 1f);
+                }
+            }
+
+            if (_tactileVolumeController != null)
+            {
+                BarTactileVolume.Value = _tactileVolumeController.Volume;
             }
         }
 
@@ -1005,6 +1079,7 @@ namespace C2O
                         // Gather enabled toggles once per tick to avoid bottlenecking
                         bool isMotionEnabled = false;
                         bool isFfbEnabled = false;
+                        bool isTactileEnabled = false;
                         Dispatcher.Invoke(() => {
                             isMotionEnabled = ChkMotionEnable.IsChecked == true;
                             isFfbEnabled = ChkFfbEnable.IsChecked == true;
@@ -1113,47 +1188,83 @@ namespace C2O
                             }
                         }
 
-                        // --- Force Feedback Processing ---
+                        // --- UPDATE: Force Feedback Processing with Granular Multipliers ---
                         if (isFfbEnabled && addr.StartsWith("/ffb/"))
                         {
-                            float val = 0f;
-
-                            if (args.Length > 0 && args[0] is float parsedFloat)
-                            {
-                                val = parsedFloat;
-                            }
+                            float val = args.Length > 0 && args[0] is float parsedFloat ? parsedFloat : 0f;
                             
-                            float gainMultiplier = (float)Dispatcher.Invoke(() => SliderFfbGain.Value);
-                            float scaledVal = val * gainMultiplier;
+                            float globalGain = 1.0f;
+                            float springMult = 1.0f;
+                            float damperMult = 1.0f;
+                            float frictionMult = 1.0f;
+
+                            Dispatcher.Invoke(() => {
+                                globalGain = (float)SliderFfbGain.Value;
+                                springMult = (float)SliderFfbSpring.Value;
+                                damperMult = (float)SliderFfbDamper.Value;
+                                frictionMult = (float)SliderFfbFriction.Value;
+                            });
+
+                            float scaledVal = val * globalGain;
 
                             // FFB Clipping Monitor Trigger
                             if (scaledVal > 100f)
                             {
-                                await Dispatcher.InvokeAsync(() => FfbClipIndicator.Fill = Brushes.Red);
+                                _ = Dispatcher.InvokeAsync(() => FfbClipIndicator.Fill = Brushes.Red);
                                 Task.Delay(100).ContinueWith(_ => Dispatcher.InvokeAsync(() => FfbClipIndicator.Fill = _bgDark));
                             }
-
-                            scaledVal = Math.Clamp(scaledVal, 0, 100);
 
                             switch (addr)
                             {
                                 case "/ffb/force":
-                                    ApplyHapticForce(scaledVal, SDL.SDL_HAPTIC_CONSTANT);
+                                    ApplyHapticForce(Math.Clamp(scaledVal, 0, 100), SDL.SDL_HAPTIC_CONSTANT);
                                     break;
                                 case "/ffb/spring":
-                                    ApplyHapticCondition(scaledVal, SDL.SDL_HAPTIC_SPRING);
+                                    ApplyHapticCondition(Math.Clamp(scaledVal * springMult, 0, 100), SDL.SDL_HAPTIC_SPRING);
                                     break;
                                 case "/ffb/damper":
-                                    ApplyHapticCondition(scaledVal, SDL.SDL_HAPTIC_DAMPER);
+                                    ApplyHapticCondition(Math.Clamp(scaledVal * damperMult, 0, 100), SDL.SDL_HAPTIC_DAMPER);
                                     break;
                                 case "/ffb/friction":
-                                    ApplyHapticCondition(scaledVal, SDL.SDL_HAPTIC_FRICTION);
+                                    ApplyHapticCondition(Math.Clamp(scaledVal * frictionMult, 0, 100), SDL.SDL_HAPTIC_FRICTION);
                                     break;
                                 case "/ffb/rumble":
-                                    ApplyHapticRumble(scaledVal);
+                                    ApplyHapticRumble(Math.Clamp(scaledVal, 0, 100));
                                     break;
                             }
                         }
+
+                        // --- NEW: Tactile Audio Processing ---
+                        if (isTactileEnabled && addr.StartsWith("/audio/"))
+                        {
+                            float val = args.Length > 0 && args[0] is float parsedFloat ? parsedFloat : 0f;
+                            float tactileMultiplier = 0f;
+
+                            Dispatcher.Invoke(() => {
+                                if (addr == "/audio/engine") tactileMultiplier = (float)SliderTactileEngine.Value;
+                                else if (addr == "/audio/impact") tactileMultiplier = (float)SliderTactileImpact.Value;
+                                else if (addr == "/audio/wind") tactileMultiplier = (float)SliderTactileWind.Value;
+                            });
+
+                            // Store the scaled envelope into its specific buffer channel
+                            if (addr == "/audio/engine") _tactileVolEngine = val * tactileMultiplier;
+                            else if (addr == "/audio/wind") _tactileVolWind = val * tactileMultiplier;
+                            else if (addr == "/audio/impact") _tactileVolImpact = val * tactileMultiplier;
+
+                            // Mix the channels together (capped at a maximum volume of 1.0)
+                            float targetVolume = Math.Clamp(_tactileVolEngine + _tactileVolWind + _tactileVolImpact, 0f, 1f);
+
+                            // Apply the volume directly to the 40Hz soundcard stream!
+                            if (_tactileVolumeController != null)
+                            {
+                                _tactileVolumeController.Volume = targetVolume;
+                            }
+
+                            // Optional: Send it to gamepad rumble motors as well
+                            ApplyHapticRumble(Math.Clamp(targetVolume * 100f, 0, 100));
+                        }
+
+
                     }
                     catch (Exception ex)
                     {
